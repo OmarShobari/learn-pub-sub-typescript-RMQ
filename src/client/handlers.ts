@@ -3,19 +3,33 @@ import type {
   GameState,
   PlayingState,
 } from "../internal/gamelogic/gamestate.js";
-import { handleMove } from "../internal/gamelogic/move.js";
+import { handleMove, MoveOutcome } from "../internal/gamelogic/move.js";
 import { handlePause } from "../internal/gamelogic/pause.js";
+import { AckType } from "../internal/pubsub/consume.js";
 
-export function handlerPause(gs: GameState): (ps: PlayingState) => void {
+export function handlerPause(gs: GameState): (ps: PlayingState) => AckType.Ack {
   return (ps: PlayingState) => {
     handlePause(gs, ps);
     process.stdout.write("> ");
+    return AckType.Ack;
   };
 }
 
-export function handlerMove(gs: GameState): (move: ArmyMove) => void {
+export function handlerMove(
+  gs: GameState,
+): (move: ArmyMove) => AckType.Ack | AckType.NackDiscard {
   return (move: ArmyMove) => {
-    handleMove(gs, move);
-    process.stdout.write("> ");
+    try {
+      const outcome = handleMove(gs, move);
+      switch (outcome) {
+        case MoveOutcome.Safe:
+        case MoveOutcome.MakeWar:
+          return AckType.Ack;
+        default:
+          return AckType.NackDiscard;
+      }
+    } finally {
+      process.stdout.write("> ");
+    }
   };
 }
