@@ -11,7 +11,6 @@ export enum SimpleQueueType {
   Transient,
 }
 
-// declareAndBind declares a queue and binds it to the specified exchange with the given routing key.
 export async function declareAndBind(
   conn: amqp.ChannelModel,
   exchange: string,
@@ -20,6 +19,7 @@ export async function declareAndBind(
   queueType: SimpleQueueType,
 ): Promise<[Channel, amqp.Replies.AssertQueue]> {
   const ch = await conn.createChannel();
+
   const queue = await ch.assertQueue(queueName, {
     durable: queueType === SimpleQueueType.Durable,
     exclusive: queueType !== SimpleQueueType.Durable,
@@ -33,14 +33,13 @@ export async function declareAndBind(
   return [ch, queue];
 }
 
-// subscribeJSON sets up a consumer that listens to messages on the specified exchange and queue.
 export async function subscribeJSON<T>(
   conn: amqp.ChannelModel,
   exchange: string,
   queueName: string,
   key: string,
   queueType: SimpleQueueType,
-  handler: (data: T) => AckType,
+  handler: (data: T) => Promise<AckType> | AckType,
 ): Promise<void> {
   const [ch, queue] = await declareAndBind(
     conn,
@@ -50,7 +49,7 @@ export async function subscribeJSON<T>(
     queueType,
   );
 
-  await ch.consume(queue.queue, function (msg: amqp.ConsumeMessage | null) {
+  await ch.consume(queue.queue, async (msg: amqp.ConsumeMessage | null) => {
     if (!msg) return;
 
     let data: T;
@@ -62,7 +61,7 @@ export async function subscribeJSON<T>(
     }
 
     try {
-      const result = handler(data);
+      const result = await handler(data);
       switch (result) {
         case AckType.Ack:
           ch.ack(msg);
